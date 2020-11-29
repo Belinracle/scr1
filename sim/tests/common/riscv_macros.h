@@ -101,15 +101,22 @@
 
 #define INTERRUPT_HANDLER j other_exception /* No interrupts should occur */
 
+
+#define ENV_CALL_ID 11
+#define PRINT_ADDR 0xF0000000
+
 #define RVTEST_CODE_BEGIN                                               \
-        .section .text.init;                                            \
-        .org 0xC0, 0x00;                                                \
+        .section .data;                                                 \
+         output_string: .string "EnvCall\n";                               \
+        .section .text.init;				                \
         .balign  64;                                                    \
         .weak stvec_handler;                                            \
         .weak mtvec_handler;                                            \
 trap_vector:                                                            \
         /* test whether the test came from pass/fail */                 \
         csrr a4, mcause;                                                \
+	li a5, ENV_CALL_ID; 						\
+        beq a4, a5, handle_exception; 					\
         li a5, CAUSE_USER_ECALL;                                        \
         beq a4, a5, _report;                                            \
         li a5, CAUSE_SUPERVISOR_ECALL;                                  \
@@ -125,18 +132,27 @@ trap_vector:                                                            \
         bgez a4, handle_exception;                                      \
         INTERRUPT_HANDLER;                                              \
 handle_exception:                                                       \
+	la a4,output_string;						\
+	li a5, PRINT_ADDR;						\
+print_loop:								\
+	lb a6, 0(a4);							\
+	beqz a6, _report;						\
+	sb a6, 0(a5);							\
+	addi a4, a4, 1;							\
+	j print_loop;							\
         /* we don't know how to handle whatever the exception was */    \
 other_exception:                                                        \
         /* some unhandlable exception occurred */                       \
         li   a0, 0x1;                                                   \
 _report:                                                                \
         j sc_exit;                                                      \
-        .balign  64;                                                    \
+        .balign  64;							\
+	.section .text.reset;                                            \
         .globl _start;                                                  \
 _start:                                                                 \
         RISCV_MULTICORE_DISABLE;                                        \
         /*INIT_SPTBR;*/                                                 \
-        /*INIT_PMP;*/                                                   \
+        /*INIT_PMP;/                                                   \
         DELEGATE_NO_TRAPS;                                              \
         li TESTNUM, 0;                                                  \
         la t0, trap_vector;                                             \
